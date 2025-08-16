@@ -248,7 +248,8 @@ void init_sign_controllers() {
   modern_sign = new RetroText::SignTextController(max_chars, char_width);
   modern_sign->setFont(RetroText::MODERN_FONT);
   modern_sign->setScrollStyle(RetroText::SMOOTH);  // Use smooth scrolling
-  modern_sign->setScrollSpeed(100);  // Use slower speed like retro
+  modern_sign->setScrollSpeed(40);  // Use slower speed like retro
+  modern_sign->setCharacterSpacing(1);  // Add 1-pixel spacing for better readability
   modern_sign->setBrightness(TEXT_DEFAULT_BRIGHTNESS);
   
   // Use callbacks instead of DisplayManager directly
@@ -259,13 +260,13 @@ void init_sign_controllers() {
   
   Serial.printf("Modern sign setup complete with callbacks\n");
   
-  // Create retro font controller  
+  // Create retro font controller
   Serial.printf("Creating retro sign: %d chars, %d pixels per char\n", max_chars, char_width);
   
   retro_sign = new RetroText::SignTextController(max_chars, char_width);
   retro_sign->setFont(RetroText::ARDUBOY_FONT);
   retro_sign->setScrollStyle(RetroText::CHARACTER);
-  retro_sign->setScrollSpeed(120);
+  retro_sign->setScrollSpeed(130);
   retro_sign->setBrightness(TEXT_DEFAULT_BRIGHTNESS);
   retro_sign->setRenderCallback(render_character_callback);
   retro_sign->setClearCallback(clear_display_callback);
@@ -437,8 +438,8 @@ void smooth_scroll_story() {
   
   // Call update every loop - let the controller handle its own timing
   active_sign->update();
-  
-  // Reset when complete for continuous scrolling
+    
+    // Reset when complete for continuous scrolling
   if (active_sign->isComplete()) {
     active_sign->reset();
   }
@@ -530,7 +531,7 @@ bool check_button_press() {
   static unsigned long buttonPressTime = 0;
   static unsigned long last_successful_press = 0;
   const unsigned long min_press_interval = 500;  // Minimum time between presses
- 
+  
   // Handle button input (using proven state-based approach)
   if (digitalRead(USER_BUTTON) == LOW) {
     // Button is currently pressed

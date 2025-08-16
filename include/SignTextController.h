@@ -51,6 +51,7 @@ public:
   void setScrollStyle(ScrollStyle style);
   void setScrollSpeed(int speed_ms);
   void setBrightness(uint8_t default_brightness);
+  void setCharacterSpacing(int spacing_pixels);  // Set spacing between characters for smooth scroll
   
   // Message control
   void setMessage(String message);
@@ -93,11 +94,13 @@ public:
 private:
   // Helper methods
   int calculateTotalScrollPixels() const;
+  int getEffectiveCharWidth() const;  // Character width + spacing for current scroll style
   
   // Display parameters
   int display_width_chars_;
   int char_width_pixels_;
   int display_width_pixels_;
+  int char_spacing_pixels_;  // Gap between characters for smooth scrolling
   
   // Configuration
   Font current_font_;

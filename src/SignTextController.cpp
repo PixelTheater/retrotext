@@ -7,6 +7,7 @@ SignTextController::SignTextController(int display_width_chars, int char_width_p
   : display_width_chars_(display_width_chars)
   , char_width_pixels_(char_width_pixels)
   , display_width_pixels_(display_width_chars * char_width_pixels)
+  , char_spacing_pixels_(1)  // Default 1-pixel spacing for smooth scroll
   , current_font_(MODERN_FONT)
   , scroll_style_(SMOOTH)
   , scroll_speed_ms_(50)
@@ -43,6 +44,10 @@ void SignTextController::setScrollStyle(ScrollStyle style) {
 
 void SignTextController::setScrollSpeed(int speed_ms) {
   scroll_speed_ms_ = speed_ms;
+}
+
+void SignTextController::setCharacterSpacing(int spacing_pixels) {
+  char_spacing_pixels_ = spacing_pixels;
 }
 
 void SignTextController::setBrightness(uint8_t default_brightness) {
@@ -149,15 +154,26 @@ ScrollStyle SignTextController::getScrollStyle() const {
 
 int SignTextController::calculateTotalScrollPixels() const {
   // Calculate how many pixels we need to scroll to show the entire message
-  // Total message width in pixels
-  int total_message_pixels = message_.length() * char_width_pixels_;
+  int effective_char_width = getEffectiveCharWidth();
+  
+  // Total message width in pixels (including spacing)
+  int total_message_pixels = message_.length() * effective_char_width;
   
   // Display width in pixels
-  int display_width_pixels = display_width_chars_ * char_width_pixels_;
+  int display_width_pixels = display_width_chars_ * effective_char_width;
   
   // We need to scroll until the end of the message is visible
   // Plus one character width to completely scroll off screen
-  return total_message_pixels - display_width_pixels + char_width_pixels_;
+  return total_message_pixels - display_width_pixels + effective_char_width;
+}
+
+int SignTextController::getEffectiveCharWidth() const {
+  // For smooth scrolling, include spacing between characters
+  // For character and static scrolling, use base character width
+  if (scroll_style_ == SMOOTH) {
+    return char_width_pixels_ + char_spacing_pixels_;
+  }
+  return char_width_pixels_;
 }
 
 void SignTextController::setDisplayManager(::DisplayManager* display_manager) {
@@ -268,10 +284,11 @@ void SignTextController::renderMessage() {
     }
   } else {
     // Scrolling display - render visible characters
+    int effective_char_width = getEffectiveCharWidth();
     for (int char_idx = 0; char_idx < message_.length(); char_idx++) {
       char c = message_.charAt(char_idx);
       uint8_t ascii = c - 32;
-      int char_pixel_pos = (char_idx * char_width_pixels_) - scroll_pixel_offset_;
+      int char_pixel_pos = (char_idx * effective_char_width) - scroll_pixel_offset_;
       
       // Only render characters that are at least partially visible
       if (shouldCharacterBeVisible(char_idx, char_pixel_pos)) {
