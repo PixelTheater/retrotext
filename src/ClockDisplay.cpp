@@ -12,6 +12,7 @@ ClockDisplay::ClockDisplay(DisplayManager* display_manager, WifiTimeLib* wifi_ti
   , time_brightness_(150)   // Bright for time
   , date_brightness_(20)    // Dim for date
   , time_valid_(false)
+  , sync_failure_time_(0)
 {
   instance_ = this;  // Set static instance for callback
 }
@@ -48,8 +49,10 @@ bool ClockDisplay::syncTime(int timeout_seconds) {
   
   if (success) {
     time_valid_ = true;
+    sync_failure_time_ = 0; // Clear any previous failure time
     Serial.println("ClockDisplay: Time sync successful");
   } else {
+    sync_failure_time_ = millis(); // Record when sync failed
     Serial.println("ClockDisplay: Time sync failed");
   }
   
@@ -84,7 +87,12 @@ void ClockDisplay::forceUpdate() {
 
 String ClockDisplay::getCurrentTimeString() {
   if (!time_valid_) {
-    return "Time not synced";
+    // If sync failed and we're still within the display duration, show "Time not synced"
+    if (sync_failure_time_ > 0 && (millis() - sync_failure_time_) < SYNC_FAILURE_DISPLAY_DURATION) {
+      return "Time not synced";
+    }
+    // After the display duration, show the system time anyway (even if it might be wrong)
+    return formatClockDisplay();
   }
   
   return formatClockDisplay();

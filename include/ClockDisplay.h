@@ -51,6 +51,10 @@ private:
   time_t now_;
   bool time_valid_;
   
+  // Fallback timing for sync failures
+  unsigned long sync_failure_time_;
+  static const unsigned long SYNC_FAILURE_DISPLAY_DURATION = 3000; // 3 seconds
+  
   // Internal methods
   String formatClockDisplay();
   void setupController();

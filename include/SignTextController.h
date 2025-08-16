@@ -74,6 +74,7 @@ public:
   int getCurrentCharPosition() const;
   int getCurrentPixelOffset() const;
   bool isScrolling() const;
+  ScrollStyle getScrollStyle() const;
   
   // Direct DisplayManager integration (preferred method)
   void setDisplayManager(::DisplayManager* display_manager);
@@ -90,6 +91,9 @@ public:
   void setBrightnessCallback(BrightnessCallback callback);
 
 private:
+  // Helper methods
+  int calculateTotalScrollPixels() const;
+  
   // Display parameters
   int display_width_chars_;
   int char_width_pixels_;
@@ -130,7 +134,6 @@ private:
   void renderMessage();
   uint8_t getCharacterBrightness(char c, int char_index);
   bool isCharacterHighlighted(int char_index, uint8_t& highlight_brightness);
-  int calculateTotalScrollPixels() const;
   bool shouldCharacterBeVisible(int char_index, int char_pixel_pos) const;
 };
 

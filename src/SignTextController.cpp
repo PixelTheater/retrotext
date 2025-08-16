@@ -143,6 +143,23 @@ bool SignTextController::isScrolling() const {
   return !scroll_complete_ && (scroll_style_ == SMOOTH || scroll_style_ == CHARACTER);
 }
 
+ScrollStyle SignTextController::getScrollStyle() const {
+  return scroll_style_;
+}
+
+int SignTextController::calculateTotalScrollPixels() const {
+  // Calculate how many pixels we need to scroll to show the entire message
+  // Total message width in pixels
+  int total_message_pixels = message_.length() * char_width_pixels_;
+  
+  // Display width in pixels
+  int display_width_pixels = display_width_chars_ * char_width_pixels_;
+  
+  // We need to scroll until the end of the message is visible
+  // Plus one character width to completely scroll off screen
+  return total_message_pixels - display_width_pixels + char_width_pixels_;
+}
+
 void SignTextController::setDisplayManager(::DisplayManager* display_manager) {
   display_manager_ = display_manager;
 }
@@ -310,10 +327,7 @@ bool SignTextController::isCharacterHighlighted(int char_index, uint8_t& highlig
   return false;
 }
 
-int SignTextController::calculateTotalScrollPixels() const {
-  // Total text width minus display width plus one character width to fully exit last character
-  return (message_.length() * char_width_pixels_) - display_width_pixels_ + char_width_pixels_;
-}
+
 
 bool SignTextController::shouldCharacterBeVisible(int char_index, int char_pixel_pos) const {
   // Character is visible if any part of it is on screen
