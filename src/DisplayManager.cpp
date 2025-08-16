@@ -308,6 +308,9 @@ void DisplayManager::initializeDrivers() {
       case 2:
         addr1 = ADDR::SDA; addr2 = ADDR::SDA;
         break;
+      case 3:
+        addr1 = ADDR::SCL; addr2 = ADDR::SCL;
+        break;        
       default:
         addr1 = ADDR::GND; addr2 = ADDR::GND;
         break;
