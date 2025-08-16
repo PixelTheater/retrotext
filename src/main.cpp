@@ -87,11 +87,11 @@ int last_hour=0;
 #define WIDTH 24
 #define HEIGHT 6
 
-#define DRIVER_DEFAULT_BRIGHTNESS 50
-#define TEXT_BRIGHT 150        // For time, capitalized words
-#define TEXT_DEFAULT_BRIGHTNESS 70  // For normal text
-#define TEXT_DIM 20            // For regular lowercase text
-#define TEXT_VERY_DIM 8       // For background elements
+#define DRIVER_DEFAULT_BRIGHTNESS 90
+#define TEXT_BRIGHT 190        // For time, capitalized words
+#define TEXT_DEFAULT_BRIGHTNESS 90  // For normal text
+#define TEXT_DIM 30            // For regular lowercase text
+#define TEXT_VERY_DIM 12       // For background elements
 #define DEMO_MODE_INTERVAL 30000  // 30 seconds between auto mode changes
 
 using namespace IS31FL3733;
