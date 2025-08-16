@@ -1,6 +1,8 @@
 // 95 characters
-// https://roseumteam.itch.io/font-4x6
-PROGMEM const unsigned char font4x6[] = {
+// Inspired by Arduboy font
+// source:https://roseumteam.itch.io/font-4x6
+
+PROGMEM const unsigned char retro_font4x6[] = {
 4,6,32,
 // 32 - [ ]
 0b00000000,

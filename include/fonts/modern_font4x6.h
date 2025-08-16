@@ -1,7 +1,11 @@
-// Converted from altFont4x6.cpp - 95 characters
+// Modern 4x6 font, uses full height - 95 characters
+// based on https://github.com/filmote/Font4x6/
 // Rotated from 90° clockwise to normal orientation
+// Hand-tweaking of some letters, spacing and punctuation
 // Full ASCII 32-126 range with blanks for missing characters
-PROGMEM const unsigned char alt_font4x6[] = {
+
+
+PROGMEM const unsigned char modern_font4x6[] = {
 4,6,32,
 // 32 - [ ] (not available)
 0b00000000,
@@ -19,8 +23,8 @@ PROGMEM const unsigned char alt_font4x6[] = {
 0b01000000,
 // 34 - ["] (not available)
 0b00000000,
-0b10100000,
-0b10100000,
+0b01010000,
+0b01010000,
 0b00000000,
 0b00000000,
 0b00000000,
@@ -509,18 +513,18 @@ PROGMEM const unsigned char alt_font4x6[] = {
 0b11100000,
 // 104 - [h]
 0b10000000,
-0b10000000,
 0b11100000,
+0b10010000,
 0b10010000,
 0b10010000,
 0b10010000,
 // 105 - [i]
-0b01000000,
+0b00100000,
 0b00000000,
-0b11000000,
-0b01000000,
-0b01000000,
-0b11100000,
+0b01100000,
+0b00100000,
+0b00100000,
+0b01110000,
 // 106 - [j]
 0b00000000,
 0b00110000,
@@ -536,12 +540,12 @@ PROGMEM const unsigned char alt_font4x6[] = {
 0b10100000,
 0b10010000,
 // 108 - [l]
-0b11000000,
-0b01000000,
-0b01000000,
-0b01000000,
-0b01000000,
-0b11100000,
+0b01100000,
+0b00100000,
+0b00100000,
+0b00100000,
+0b00100000,
+0b01110000,
 // 109 - [m]
 0b00000000,
 0b10010000,
