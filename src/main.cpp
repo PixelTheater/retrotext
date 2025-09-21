@@ -5,7 +5,7 @@
 #include <sstream> // used for parsing and building strings
 #include <iostream>
 #include <string>
-#include "is31fl3733.hpp"
+#include "IS31FL373x.h"
 #include "WifiTimeLib.h"
 #include <WiFi.h>
 #include <WiFiManager.h>
@@ -94,7 +94,7 @@ int last_hour=0;
 #define TEXT_VERY_DIM 12       // For background elements
 #define DEMO_MODE_INTERVAL 30000  // 30 seconds between auto mode changes
 
-using namespace IS31FL3733;
+// IS31FL373x driver - no namespace needed
 
 
 // ---------------------------------------------------------------------------------------------

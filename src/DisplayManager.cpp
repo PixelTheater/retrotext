@@ -3,8 +3,6 @@
 #include <fonts/retro_font4x6.h>
 #include <fonts/modern_font4x6.h>
 
-using namespace IS31FL3733;
-
 DisplayManager::DisplayManager(int num_boards, int board_width, int board_height)
   : num_boards_(num_boards)
   , board_width_(board_width)
@@ -13,24 +11,15 @@ DisplayManager::DisplayManager(int num_boards, int board_width, int board_height
   , total_height_(board_height)
   , character_width_(4)
   , max_characters_(total_width_ / character_width_)
-  , display_buffers_(nullptr)
-  , drivers_(nullptr)
+  , drivers_{nullptr, nullptr, nullptr, nullptr}
 {
 }
 
 DisplayManager::~DisplayManager() {
-  if (display_buffers_) {
-    for (int i = 0; i < num_boards_; i++) {
-      delete[] display_buffers_[i];
-    }
-    delete[] display_buffers_;
-  }
-  
-  if (drivers_) {
-    for (int i = 0; i < num_boards_; i++) {
+  for (int i = 0; i < 4; i++) {
+    if (drivers_[i]) {
       delete drivers_[i];
     }
-    delete[] drivers_;
   }
 }
 
@@ -38,26 +27,28 @@ bool DisplayManager::initialize() {
   Serial.println("Initializing DisplayManager...");
   
   // Initialize I2C
+  Serial.println("Setting up I2C...");
   Wire.begin();
   Wire.setClock(800000); // 800 kHz I2C
+  Serial.println("I2C setup complete");
   
-  // Initialize buffers and drivers
-  initializeBuffers();
+  // Initialize drivers
+  Serial.println("Creating individual drivers...");
   initializeDrivers();
   
-  // Initialize each board
-  for (int board = 0; board < num_boards_; board++) {
-    Serial.printf("Initializing board %d at address 0x%02X\n", board, drivers_[board]->GetI2CAddress());
-    
-    drivers_[board]->Init();
-    drivers_[board]->SetGCC(50); // Default global current control
-    
-    // Set all LEDs to ON state but with 0 brightness initially
-    drivers_[board]->SetLEDMatrixState(LED_STATE::ON);
-    drivers_[board]->SetLEDMatrixPWM(0);
+  // Initialize each driver
+  for (int i = 0; i < num_boards_; i++) {
+    if (drivers_[i]) {
+      Serial.printf("Initializing driver %d...\n", i);
+      drivers_[i]->begin();
+      drivers_[i]->setGlobalCurrent(50);
+      Serial.printf("Driver %d initialized\n", i);
+    }
   }
   
+  Serial.println("Clearing all displays...");
   clearBuffer();
+  Serial.println("Updating all displays...");
   updateDisplay();
   
   Serial.println("DisplayManager initialization complete");
@@ -66,24 +57,24 @@ bool DisplayManager::initialize() {
 
 bool DisplayManager::verifyDrivers() {
   Serial.println("Verifying LED driver communication...");
-  bool all_ok = true;
   
-  for (int board = 0; board < num_boards_; board++) {
-    uint8_t address = drivers_[board]->GetI2CAddress();
-    Serial.printf("Testing board %d at address 0x%02X... ", board, address);
-    
-    // Try to read a register
-    uint8_t test_data = 0;
-    uint8_t result = i2c_read_reg(address, 0x00, &test_data, 1);
-    
-    if (result > 0) {
-      Serial.printf("SUCCESS - Read data: 0x%02X\n", test_data);
-    } else {
-      Serial.println("FAILED - No response");
+  bool all_ok = true;
+  for (int i = 0; i < num_boards_; i++) {
+    if (!drivers_[i]) {
+      Serial.printf("Driver %d not initialized\n", i);
       all_ok = false;
+      continue;
     }
+    
+    Serial.printf("Testing driver %d...\n", i);
+    // Test basic operations
+    drivers_[i]->clear();
+    drivers_[i]->drawPixel(0, 0, 100);
+    drivers_[i]->show();
+    Serial.printf("Driver %d verified\n", i);
   }
   
+  Serial.printf("Driver verification complete: %d boards\n", num_boards_);
   return all_ok;
 }
 
@@ -117,32 +108,44 @@ void DisplayManager::scanI2C() {
 void DisplayManager::setPixel(int x, int y, uint8_t brightness) {
   if (!isValidPosition(x, y)) return;
   
-  // Map to board coordinates
-  int board, local_x, local_y;
-  mapPixelToBoard(x, y, board, local_x, local_y);
+  // Apply the same coordinate transformation as the old working code
+  int screen_x = total_width_ - x - 1;
+  int screen_y = total_height_ - y - 1;
   
-  // Calculate LED number in buffer
-  uint8_t led_number = mapCoordinateToLED(board, local_x, local_y);
+  // Determine which board this pixel belongs to
+  int board = screen_x / board_width_;
+  if (board >= num_boards_ || !drivers_[board]) return;
   
-  if (led_number < PIXELS_PER_BOARD) {
-    display_buffers_[board][led_number] = brightness;
+  // Calculate local coordinates within the board (24x6 logical)
+  int local_x = screen_x % board_width_;  // 0-23
+  int local_y = screen_y;                 // 0-5
+  
+  // Convert 24x6 logical coordinates to 12x12 physical coordinates for RetroText PCB
+  // 6 characters in a line: chars 0,1,2 use SW1-6, chars 3,4,5 use SW7-12
+  int char_index = local_x / 4;  // Which character (0-5)
+  int char_pixel_x = local_x % 4;  // Pixel within character (0-3)
+  
+  int physical_x, physical_y;
+  
+  if (char_index < 3) {
+    // Characters 0,1,2: use SW1-6 (top half)
+    physical_x = (char_index * 4) + char_pixel_x;  // CS1-4, CS5-8, CS9-12
+    physical_y = local_y;  // SW1-6 (rows 0-5)
+  } else {
+    // Characters 3,4,5: use SW7-12 (bottom half)  
+    physical_x = ((char_index - 3) * 4) + char_pixel_x;  // CS1-4, CS5-8, CS9-12
+    physical_y = local_y + 6;  // SW7-12 (rows 6-11)
   }
+  
+  drivers_[board]->drawPixel(physical_x, physical_y, brightness);
 }
 
 uint8_t DisplayManager::getPixel(int x, int y) const {
   if (!isValidPosition(x, y)) return 0;
   
-  // Map to board coordinates
-  int board, local_x, local_y;
-  mapPixelToBoard(x, y, board, local_x, local_y);
-  
-  // Calculate LED number in buffer
-  uint8_t led_number = mapCoordinateToLED(board, local_x, local_y);
-  
-  if (led_number < PIXELS_PER_BOARD) {
-    return display_buffers_[board][led_number];
-  }
-  
+  // IS31FL373x drivers don't support pixel readback
+  // Return 0 - this is mainly used for debugging
+  // Most LED drivers don't support reading pixel values back
   return 0;
 }
 
@@ -151,35 +154,38 @@ bool DisplayManager::isValidPosition(int x, int y) const {
 }
 
 void DisplayManager::clearBuffer() {
-  for (int board = 0; board < num_boards_; board++) {
-    std::fill_n(display_buffers_[board], PIXELS_PER_BOARD, 0);
+  for (int i = 0; i < num_boards_; i++) {
+    if (drivers_[i]) {
+      drivers_[i]->clear();
+    }
   }
 }
 
 void DisplayManager::fillBuffer(uint8_t brightness) {
-  for (int board = 0; board < num_boards_; board++) {
-    std::fill_n(display_buffers_[board], PIXELS_PER_BOARD, brightness);
+  // fillScreen doesn't exist in IS31FL373x driver, so implement manually
+  for (int y = 0; y < total_height_; y++) {
+    for (int x = 0; x < total_width_; x++) {
+      setPixel(x, y, brightness);
+    }
   }
 }
 
 void DisplayManager::dimBuffer(uint8_t amount) {
-  for (int board = 0; board < num_boards_; board++) {
-    for (int i = 0; i < PIXELS_PER_BOARD; i++) {
-      if (display_buffers_[board][i] > 35) {
-        display_buffers_[board][i] *= 0.85; // Move faster over bright levels
-      }
-      if (amount > display_buffers_[board][i]) {
-        display_buffers_[board][i] = 0;
-      } else {
-        display_buffers_[board][i] -= amount;
-      }
+  // Use master brightness control for dimming effect
+  for (int i = 0; i < num_boards_; i++) {
+    if (drivers_[i]) {
+      uint8_t current_brightness = 255 - amount;
+      if (current_brightness < 10) current_brightness = 10;  // Minimum visibility
+      drivers_[i]->setMasterBrightness(current_brightness);
     }
   }
 }
 
 void DisplayManager::updateDisplay() {
-  for (int board = 0; board < num_boards_; board++) {
-    drivers_[board]->SetPWM(display_buffers_[board]);
+  for (int i = 0; i < num_boards_; i++) {
+    if (drivers_[i]) {
+      drivers_[i]->show();
+    }
   }
 }
 
@@ -219,14 +225,16 @@ void DisplayManager::drawText(const String& text, int start_x, uint8_t brightnes
 }
 
 void DisplayManager::setGlobalBrightness(uint8_t brightness) {
-  for (int board = 0; board < num_boards_; board++) {
-    drivers_[board]->SetGCC(brightness);
+  for (int i = 0; i < num_boards_; i++) {
+    if (drivers_[i]) {
+      drivers_[i]->setGlobalCurrent(brightness);
+    }
   }
 }
 
 void DisplayManager::setBoardBrightness(int board_index, uint8_t brightness) {
-  if (board_index >= 0 && board_index < num_boards_) {
-    drivers_[board_index]->SetGCC(brightness);
+  if (board_index >= 0 && board_index < num_boards_ && drivers_[board_index]) {
+    drivers_[board_index]->setGlobalCurrent(brightness);
   }
 }
 
@@ -234,18 +242,7 @@ int DisplayManager::getBoardForPixel(int x) const {
   return x / board_width_;
 }
 
-void DisplayManager::mapPixelToBoard(int x, int y, int& board, int& local_x, int& local_y) const {
-  // Flip and invert coordinates (hardware-specific transformation)
-  int screen_x = total_width_ - x - 1;
-  int screen_y = total_height_ - y - 1;
-  
-  // Determine board
-  board = screen_x / board_width_;
-  
-  // Local coordinates within the board
-  local_x = screen_x % board_width_;
-  local_y = screen_y;
-}
+// mapPixelToBoard removed - IS31FL373x_Canvas handles multi-board coordinates directly
 
 uint8_t DisplayManager::getCharacterPattern(uint8_t character, uint8_t row, bool use_alt_font) const {
   if (use_alt_font) {
@@ -262,88 +259,48 @@ uint8_t DisplayManager::getCharacterPattern(uint8_t character, uint8_t row, bool
   return 0;
 }
 
-// Static I2C functions
-uint8_t DisplayManager::i2c_read_reg(const uint8_t i2c_addr, const uint8_t reg_addr, uint8_t *buffer, const uint8_t length) {
-  Wire.beginTransmission(i2c_addr);
-  Wire.write(reg_addr);
-  Wire.endTransmission();
-  byte bytesRead = Wire.requestFrom(i2c_addr, length);
-  for (int i = 0; i < bytesRead && i < length; i++) {
-    buffer[i] = Wire.read();
-  }
-  return bytesRead;
-}
-
-uint8_t DisplayManager::i2c_write_reg(const uint8_t i2c_addr, const uint8_t reg_addr, const uint8_t *buffer, const uint8_t count) {
-  Wire.beginTransmission(i2c_addr);
-  Wire.write(reg_addr);
-  Wire.write(buffer, count);
-  return Wire.endTransmission();
-}
+// I2C functions removed - IS31FL373x driver handles I2C directly
 
 // Private helper methods
-void DisplayManager::initializeBuffers() {
-  display_buffers_ = new uint8_t*[num_boards_];
-  for (int i = 0; i < num_boards_; i++) {
-    display_buffers_[i] = new uint8_t[PIXELS_PER_BOARD];
-    std::fill_n(display_buffers_[i], PIXELS_PER_BOARD, 0);
-  }
-}
-
 void DisplayManager::initializeDrivers() {
-  // Allocate array of pointers, not array of objects (since IS31FL3733Driver can't be copied)
-  drivers_ = new IS31FL3733Driver*[num_boards_];
+  Serial.printf("Creating %d individual drivers\n", num_boards_);
   
-  for (int i = 0; i < num_boards_; i++) {
-    ADDR addr1, addr2;
+  for (int i = 0; i < num_boards_ && i < 4; i++) {
+    ADDR addr;
     
     // Initialize with the appropriate addresses for each board
     switch (i) {
-      case 0:
-        addr1 = ADDR::GND; addr2 = ADDR::GND;
-        break;
-      case 1:
-        addr1 = ADDR::VCC; addr2 = ADDR::VCC;
-        break;
-      case 2:
-        addr1 = ADDR::SDA; addr2 = ADDR::SDA;
-        break;
-      case 3:
-        addr1 = ADDR::SCL; addr2 = ADDR::SCL;
-        break;        
-      default:
-        addr1 = ADDR::GND; addr2 = ADDR::GND;
-        break;
+      case 0: addr = ADDR::GND; break;
+      case 1: addr = ADDR::VCC; break;
+      case 2: addr = ADDR::SDA; break;
+      case 3: addr = ADDR::SCL; break;
+      default: addr = ADDR::GND; break;
     }
     
-    // Create each driver instance with new
-    drivers_[i] = new IS31FL3733Driver(addr1, addr2, &i2c_read_reg, &i2c_write_reg);
+    Serial.printf("Creating driver %d with address %d\n", i, (int)addr);
+    drivers_[i] = new IS31FL3737(addr);
+    Serial.printf("Driver %d created successfully\n", i);
   }
+  
+  Serial.println("All drivers created");
 }
 
-uint8_t DisplayManager::mapCoordinateToLED(int board, int local_x, int local_y) const {
-  // Hardware-specific coordinate mapping for IS31FL3737 using IS31FL3733 driver
+void DisplayManager::convertLogicalToPhysical(int logical_x, int logical_y, int& physical_x, int& physical_y) {
+  // Convert 24x6 logical coordinates to 12x12 physical coordinates for RetroText PCB
+  // Based on PCB_Layout.md: 6 characters arranged horizontally
+  // Characters 0,1,2 use SW1-6 (CS1-4, CS5-8, CS9-12)
+  // Characters 3,4,5 use SW7-12 (CS1-4, CS5-8, CS9-12)
   
-  // cs and sw are mapped to 12x12 LED driver space
-  int cs = local_x;
-  int sw = cs < 12 ? local_y : local_y + 6;
-  cs = cs % 12;
-
-  // The IS31FL3737 has 12 columns and 12 rows, but we are using the driver for
-  // the IS31FL3733, which has 16 columns and 12 rows. Because of this,
-  // CS7-CS12 (6..11) are off by 2, and must map to values 8-13.
-  if (cs >= 6 && cs < 12) cs += 2;
+  int char_index = logical_x / 4;      // Which character (0-5)
+  int char_pixel_x = logical_x % 4;    // Pixel within character (0-3)
   
-  // The buffer is just an array, y*16+x
-  return sw * 16 + cs;
-}
-
-ADDR DisplayManager::getBoardAddress(int board_index) const {
-  // This is a placeholder - implement based on your hardware addressing scheme
-  switch (board_index) {
-    case 0: return ADDR::GND;
-    case 1: return ADDR::VCC;
-    case 2: return ADDR::SDA;
-    default: return ADDR::GND;
+  if (char_index < 3) {
+    // Characters 0,1,2: top half of chip (SW1-6)
+    physical_x = (char_index * 4) + char_pixel_x;  // CS1-4, CS5-8, CS9-12
+    physical_y = logical_y;                         // SW1-6 (rows 0-5)
+  } else {
+    // Characters 3,4,5: bottom half of chip (SW7-12)
+    physical_x = ((char_index - 3) * 4) + char_pixel_x;  // CS1-4, CS5-8, CS9-12
+    physical_y = logical_y + 6;                           // SW7-12 (rows 6-11)
   }
 }

@@ -2,7 +2,7 @@
 #define DISPLAY_MANAGER_H
 
 #include <Arduino.h>
-#include "is31fl3733.hpp"
+#include "IS31FL373x.h"
 
 class DisplayManager {
 public:
@@ -44,7 +44,6 @@ public:
   
   // Hardware-specific methods
   int getBoardForPixel(int x) const;
-  void mapPixelToBoard(int x, int y, int& board, int& local_x, int& local_y) const;
   
   // Font access (temporary - should be moved to font manager later)
   uint8_t getCharacterPattern(uint8_t character, uint8_t row, bool use_alt_font = true) const;
@@ -59,22 +58,13 @@ private:
   int character_width_;
   int max_characters_;
   
-  // Hardware abstraction
-  static const int PIXELS_PER_BOARD = 16 * 12;  // IS31FL3733 configuration
-  uint8_t** display_buffers_;  // Array of buffer pointers, one per board
-  IS31FL3733::IS31FL3733Driver** drivers_;  // Array of driver pointers
-  
-  // I2C functions (passed to drivers)
-  static uint8_t i2c_read_reg(const uint8_t i2c_addr, const uint8_t reg_addr, uint8_t *buffer, const uint8_t length);
-  static uint8_t i2c_write_reg(const uint8_t i2c_addr, const uint8_t reg_addr, const uint8_t *buffer, const uint8_t count);
+  // Hardware abstraction - IS31FL373x driver integration
+  static const int PIXELS_PER_BOARD = 12 * 12;  // IS31FL3737 native configuration
+  IS31FL3737* drivers_[4];  // Individual drivers for each board
   
   // Internal helper methods
-  void initializeBuffers();
   void initializeDrivers();
-  uint8_t mapCoordinateToLED(int board, int local_x, int local_y) const;
-  
-  // Board addressing configuration (IS31FL3737 specific)
-  IS31FL3733::ADDR getBoardAddress(int board_index) const;
+  void convertLogicalToPhysical(int logical_x, int logical_y, int& physical_x, int& physical_y);
 };
 
 #endif // DISPLAY_MANAGER_H
