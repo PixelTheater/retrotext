@@ -589,9 +589,19 @@ void setup() {
     while(1) delay(1000); // Halt
   }
   
-  // Verify drivers and scan I2C
+  // Print display configuration and connection info
+  display_manager->printDisplayConfiguration();
+  
+  // Scan I2C bus for all devices
   display_manager->scanI2C();
-  display_manager->verifyDrivers();
+  
+  // Verify each driver individually with proper error handling
+  if (!display_manager->verifyDrivers()) {
+    Serial.println("WARNING: Some display drivers failed verification!");
+    Serial.println("Check I2C connections and ADDR pin configuration.");
+    Serial.println("System will continue but displays may not work properly.");
+    delay(3000); // Give user time to read the warning
+  }
   
   // Initialize Clock Display
   Serial.println("Initializing ClockDisplay...");

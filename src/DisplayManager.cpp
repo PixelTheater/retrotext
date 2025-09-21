@@ -40,9 +40,29 @@ bool DisplayManager::initialize() {
   for (int i = 0; i < num_boards_; i++) {
     if (drivers_[i]) {
       Serial.printf("Initializing driver %d...\n", i);
+      
+      // Test I2C communication before initializing
+      ADDR addr_pin;
+      switch (i) {
+        case 0: addr_pin = ADDR::GND; break;
+        case 1: addr_pin = ADDR::VCC; break;
+        case 2: addr_pin = ADDR::SDA; break;
+        case 3: addr_pin = ADDR::SCL; break;
+        default: addr_pin = ADDR::GND; break;
+      }
+      
+      uint8_t i2c_addr = getI2CAddressFromADDR(addr_pin);
+      Wire.beginTransmission(i2c_addr);
+      uint8_t error = Wire.endTransmission();
+      
+      if (error != 0) {
+        Serial.printf("WARNING: Driver %d (0x%02X) not responding - skipping initialization\n", i, i2c_addr);
+        continue;
+      }
+      
       drivers_[i]->begin();
       drivers_[i]->setGlobalCurrent(50);
-      Serial.printf("Driver %d initialized\n", i);
+      Serial.printf("Driver %d initialized successfully\n", i);
     }
   }
   
@@ -61,20 +81,37 @@ bool DisplayManager::verifyDrivers() {
   bool all_ok = true;
   for (int i = 0; i < num_boards_; i++) {
     if (!drivers_[i]) {
-      Serial.printf("Driver %d not initialized\n", i);
+      Serial.printf("ERROR: Driver %d not initialized\n", i);
       all_ok = false;
       continue;
     }
     
-    Serial.printf("Testing driver %d...\n", i);
+    Serial.printf("Testing driver %d communication...\n", i);
+    
+    // Test I2C communication first
+    if (!testDriverCommunication(i)) {
+      Serial.printf("ERROR: Driver %d I2C communication failed!\n", i);
+      all_ok = false;
+      continue;
+    }
+    
     // Test basic operations
     drivers_[i]->clear();
     drivers_[i]->drawPixel(0, 0, 100);
     drivers_[i]->show();
-    Serial.printf("Driver %d verified\n", i);
+    delay(100);  // Brief pause to see the test pixel
+    drivers_[i]->clear();
+    drivers_[i]->show();
+    
+    Serial.printf("Driver %d verified successfully\n", i);
   }
   
-  Serial.printf("Driver verification complete: %d boards\n", num_boards_);
+  if (all_ok) {
+    Serial.printf("✓ All %d display drivers verified successfully\n", num_boards_);
+  } else {
+    Serial.printf("✗ Driver verification failed - some displays may not be connected\n");
+  }
+  
   return all_ok;
 }
 
@@ -303,4 +340,102 @@ void DisplayManager::convertLogicalToPhysical(int logical_x, int logical_y, int&
     physical_x = ((char_index - 3) * 4) + char_pixel_x;  // CS1-4, CS5-8, CS9-12
     physical_y = logical_y + 6;                           // SW7-12 (rows 6-11)
   }
+}
+
+void DisplayManager::printDisplayConfiguration() {
+  Serial.println("\n=== RetroText Display Configuration ===");
+  Serial.printf("Total displays: %d\n", num_boards_);
+  Serial.printf("Display resolution: %dx%d (total: %dx%d)\n", 
+                board_width_, board_height_, total_width_, total_height_);
+  Serial.printf("Characters per display: 6 (4x6 pixels each)\n");
+  Serial.printf("I2C bus speed: 800 kHz\n\n");
+  
+  Serial.println("Display Layout (Left to Right):");
+  Serial.println("┌─────────────────────────────────────────────────────────────┐");
+  Serial.println("│ Pos │ ADDR Pin │ I2C Addr │ Connection │ Status             │");
+  Serial.println("├─────────────────────────────────────────────────────────────┤");
+  
+  for (int i = 0; i < num_boards_; i++) {
+    ADDR addr_pin;
+    switch (i) {
+      case 0: addr_pin = ADDR::GND; break;
+      case 1: addr_pin = ADDR::VCC; break;
+      case 2: addr_pin = ADDR::SDA; break;
+      case 3: addr_pin = ADDR::SCL; break;
+      default: addr_pin = ADDR::GND; break;
+    }
+    
+    uint8_t i2c_addr = getI2CAddressFromADDR(addr_pin);
+    const char* pin_name = getADDRPinName(addr_pin);
+    
+    // Test I2C communication
+    Wire.beginTransmission(i2c_addr);
+    uint8_t error = Wire.endTransmission();
+    
+    const char* status = (error == 0) ? "✓ Connected" : "✗ Not Found";
+    
+    Serial.printf("│  %d  │   %-6s │  0x%02X    │   %-8s │ %-18s │\n", 
+                  i, pin_name, i2c_addr, pin_name, status);
+  }
+  
+  Serial.println("└─────────────────────────────────────────────────────────────┘");
+  Serial.println("\nPin Connections (standard I2C):");
+  Serial.println("  VCC  → 3.3V");
+  Serial.println("  GND  → Ground"); 
+  Serial.println("  SDA  → GPIO21 (ESP32)");
+  Serial.println("  SCL  → GPIO22 (ESP32)");
+  Serial.println("  ADDR → Connect to GND/VCC/SDA/SCL for addressing\n");
+}
+
+uint8_t DisplayManager::getI2CAddressFromADDR(ADDR addr) const {
+  // Based on IS31FL3737 datasheet and README.md
+  switch (addr) {
+    case ADDR::GND: return 0x50;  // ADDR pin connected to GND
+    case ADDR::VCC: return 0x5A;  // ADDR pin connected to VCC  
+    case ADDR::SDA: return 0x5F;  // ADDR pin connected to SDA
+    case ADDR::SCL: return 0x54;  // ADDR pin connected to SCL
+    default: return 0x50;
+  }
+}
+
+const char* DisplayManager::getADDRPinName(ADDR addr) const {
+  switch (addr) {
+    case ADDR::GND: return "GND";
+    case ADDR::VCC: return "VCC";
+    case ADDR::SDA: return "SDA";
+    case ADDR::SCL: return "SCL";
+    default: return "GND";
+  }
+}
+
+bool DisplayManager::testDriverCommunication(int driver_index) {
+  if (driver_index >= num_boards_ || !drivers_[driver_index]) {
+    return false;
+  }
+  
+  // Get the I2C address for this driver
+  ADDR addr_pin;
+  switch (driver_index) {
+    case 0: addr_pin = ADDR::GND; break;
+    case 1: addr_pin = ADDR::VCC; break;
+    case 2: addr_pin = ADDR::SDA; break;
+    case 3: addr_pin = ADDR::SCL; break;
+    default: return false;
+  }
+  
+  uint8_t i2c_addr = getI2CAddressFromADDR(addr_pin);
+  
+  // Test I2C communication
+  Wire.beginTransmission(i2c_addr);
+  uint8_t error = Wire.endTransmission();
+  
+  if (error != 0) {
+    Serial.printf("  I2C Error %d for address 0x%02X (%s pin)\n", 
+                  error, i2c_addr, getADDRPinName(addr_pin));
+    return false;
+  }
+  
+  Serial.printf("  I2C communication OK: 0x%02X (%s pin)\n", 
+                i2c_addr, getADDRPinName(addr_pin));
+  return true;
 }

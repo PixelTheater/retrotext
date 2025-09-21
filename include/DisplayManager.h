@@ -16,6 +16,7 @@ public:
   bool initialize();
   bool verifyDrivers();
   void scanI2C();
+  void printDisplayConfiguration();
   
   // Display properties
   int getWidth() const { return total_width_; }
@@ -65,6 +66,11 @@ private:
   // Internal helper methods
   void initializeDrivers();
   void convertLogicalToPhysical(int logical_x, int logical_y, int& physical_x, int& physical_y);
+  
+  // Helper methods for display information
+  uint8_t getI2CAddressFromADDR(ADDR addr) const;
+  const char* getADDRPinName(ADDR addr) const;
+  bool testDriverCommunication(int driver_index);
 };
 
 #endif // DISPLAY_MANAGER_H
